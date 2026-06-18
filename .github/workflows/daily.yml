@@ -1,0 +1,48 @@
+name: Daily scraper
+
+on:
+  schedule:
+    # 7:00 AM Warsaw summer time (CEST = UTC+2)
+    # In winter (CET = UTC+1) this fires at 6:00 AM — change to "0 6 * * *" from late October
+    - cron: '0 5 * * *'
+  workflow_dispatch: # allow manual trigger from GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Restore the SQLite DB from the previous run so we don't re-notify old listings
+      - name: Restore listings DB
+        uses: actions/cache/restore@v4
+        with:
+          path: listings.db
+          key: listings-db-${{ github.run_id }}
+          restore-keys: |
+            listings-db-
+
+      - name: Run scraper
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ secrets.RESEND_FROM }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          DB_PATH: listings.db
+        run: python main.py
+
+      # Always save the DB even if the scraper step fails (partial results still worth keeping)
+      - name: Save listings DB
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: listings.db
+          key: listings-db-${{ github.run_id }}
