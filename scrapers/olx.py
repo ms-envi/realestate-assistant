@@ -1,4 +1,6 @@
 """Scraper for olx.pl building plot listings."""
+from __future__ import annotations
+
 import json
 import re
 from urllib.parse import urlencode

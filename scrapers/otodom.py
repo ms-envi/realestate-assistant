@@ -1,4 +1,6 @@
 """Scraper for otodom.pl building plot listings."""
+from __future__ import annotations
+
 import json
 
 from bs4 import BeautifulSoup

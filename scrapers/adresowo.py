@@ -1,4 +1,6 @@
 """Scraper for adresowo.pl building plot listings."""
+from __future__ import annotations
+
 import re
 
 from bs4 import BeautifulSoup
@@ -7,34 +9,19 @@ from config import MUNICIPALITIES
 from .base import BaseScraper, Listing
 
 _MUNICIPALITY_SLUGS: dict[str, str] = {
-    "Liszki": "liszki-gmina",
-    "Czernichów": "czernichow-gmina",
+    "Liszki": "gmina-liszki",
+    "Czernichów": "gmina-czernichow",
 }
 
-_BASE_URL = "https://adresowo.pl/nieruchomosci/dzialki/{municipality}/"
-
-
-def _parse_price(text: str) -> float | None:
-    digits = re.sub(r"[^\d]", "", text)
-    return float(digits) if digits else None
-
-
-def _parse_area(text: str) -> float | None:
-    match = re.search(r"([\d\s]+)\s*m", text)
-    if match:
-        raw = re.sub(r"\s", "", match.group(1))
-        try:
-            return float(raw)
-        except ValueError:
-            pass
-    return None
+_BASE_URL = "https://adresowo.pl/dzialki/{municipality}/"
 
 
 class AdresowoScraper(BaseScraper):
     """Scraper for adresowo.pl.
 
-    Fetches building plot listings for each configured municipality by parsing
-    the HTML listing cards.
+    The site uses Tailwind utility classes so there are no stable semantic
+    selectors. Instead we locate listing anchors (href starting with /o/) and
+    walk up the DOM to the card container.
     """
 
     def fetch_listings(self) -> list[Listing]:
@@ -57,7 +44,7 @@ class AdresowoScraper(BaseScraper):
         return results
 
     def _parse(self, html: str) -> list[Listing]:
-        """Parse listing cards from the adresowo.pl search page.
+        """Parse listings by finding /o/ anchors and walking up to their cards.
 
         Args:
             html: Raw HTML of the search results page.
@@ -66,48 +53,51 @@ class AdresowoScraper(BaseScraper):
             List of parsed :class:`Listing` objects.
         """
         soup = BeautifulSoup(html, "lxml")
-        cards = soup.select(".property-card, .listing-item, article.offer")
+        anchors = [a for a in soup.find_all("a", href=True) if a["href"].startswith("/o/")]
         listings: list[Listing] = []
-        for card in cards:
+        for anchor in anchors:
             try:
-                listing = self._parse_card(card)
+                listing = self._parse_anchor(anchor)
                 if listing:
                     listings.append(listing)
             except Exception as exc:
-                self.logger.debug("adresowo.pl: skipping card: %s", exc)
+                self.logger.debug("adresowo.pl: skipping anchor %s: %s", anchor.get("href"), exc)
         return listings
 
-    def _parse_card(self, card) -> Listing | None:
-        """Convert a BeautifulSoup card tag to a :class:`Listing`.
+    def _parse_anchor(self, anchor) -> Listing | None:
+        """Convert a listing anchor and its card context to a :class:`Listing`.
+
+        Card DOM structure (confirmed against live site):
+        a → h2 → div.flex → div.isolate (price/area text) → div.relative (card root)
 
         Args:
-            card: A listing card tag from the search results.
+            anchor: An ``<a>`` tag whose href starts with ``/o/``.
 
         Returns:
             A :class:`Listing`, or ``None`` if required fields are missing.
         """
-        anchor = card.select_one("a.property-title, h2 a, h3 a, .title a")
-        if not anchor:
-            return None
+        href = anchor["href"]
+        url = f"https://adresowo.pl{href}"
+        listing_id = href.rstrip("/").split("/")[-1]
 
-        url = anchor.get("href", "")
-        if not url.startswith("https://"):
-            url = f"https://adresowo.pl{url}" if url.startswith("/") else ""
-        if not url.startswith("https://"):
-            return None
+        # Walk up 4 levels to the card root
+        card = anchor.parent.parent.parent.parent
+        card_text = card.get_text(separator="|", strip=True)
 
-        listing_id = url.rstrip("/").split("/")[-1]
+        # Price: last run of digits before "zł"
+        price_match = re.search(r"([\d][\d\s]*)\|?\s*zł", card_text)
+        price = float(re.sub(r"\s", "", price_match.group(1))) if price_match else None
 
-        title = anchor.get_text(strip=True)
+        # Area: last run of digits before "m²"
+        area_match = re.search(r"([\d][\d\s]*)\|?\s*m²", card_text)
+        area = float(re.sub(r"\s", "", area_match.group(1))) if area_match else None
 
-        price_tag = card.select_one(".price, [class*='price']")
-        price = _parse_price(price_tag.get_text()) if price_tag else None
-
-        area_tag = card.select_one(".area, [class*='area'], [class*='surface']")
-        area = _parse_area(area_tag.get_text()) if area_tag else None
-
-        location_tag = card.select_one(".location, .address, [class*='location']")
-        location = location_tag.get_text(strip=True) if location_tag else ""
+        # Title and location from h2 (contains the anchor)
+        h2 = anchor.find_parent("h2")
+        h2_text = h2.get_text(separator="|", strip=True) if h2 else anchor.get_text(strip=True)
+        parts = [p.strip() for p in h2_text.split("|") if p.strip()]
+        location = parts[0] if parts else ""
+        title = " — ".join(parts[:2]) if len(parts) >= 2 else h2_text
 
         return Listing(
             id=f"adresowo_{listing_id}",

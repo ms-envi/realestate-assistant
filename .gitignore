@@ -1,0 +1,4 @@
+.env
+listings.db
+__pycache__/
+*.pyc

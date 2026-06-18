@@ -13,10 +13,14 @@ USER_AGENT = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+RESEND_FROM = os.environ.get("RESEND_FROM", "")  # must be a verified Resend sender address
 NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL", "")
 
 DB_PATH = os.environ.get("DB_PATH", "listings.db")
+
+# Listing filters — applied after scraping, before email/storage
+MAX_PRICE = 500_000          # zł; None = no limit
+MIN_AREA_M2 = 1_500          # m²; None = no limit
+# Locations (substring match) that are exempt from all filters
+FILTER_EXEMPT_LOCATIONS = ["Rączna", "Ściejowice"]

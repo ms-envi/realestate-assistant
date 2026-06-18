@@ -1,4 +1,6 @@
 """Base scraper class and Listing dataclass shared by all scrapers."""
+from __future__ import annotations
+
 import abc
 import logging
 import time

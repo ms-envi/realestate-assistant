@@ -1,23 +1,20 @@
 """Scraper for nieruchomosci-online.pl building plot listings."""
+from __future__ import annotations
+
 import re
-from urllib.parse import urlencode
 
 from bs4 import BeautifulSoup
 
 from config import MUNICIPALITIES
 from .base import BaseScraper, Listing
 
-_BASE_URL = "https://www.nieruchomosci-online.pl/wyniki,dzialki-budowlane,sprzedaz"
-
-_MUNICIPALITY_PARAMS: dict[str, str] = {
+# Each municipality gets its own subdomain; static HTML is server-rendered
+_MUNICIPALITY_SUBDOMAINS: dict[str, str] = {
     "Liszki": "liszki",
     "Czernichów": "czernichow",
 }
 
-
-def _build_url(municipality: str) -> str:
-    slug = _MUNICIPALITY_PARAMS.get(municipality, municipality.lower())
-    return f"{_BASE_URL}/{slug}.html"
+_BASE_URL = "https://{subdomain}.nieruchomosci-online.pl/dzialki/"
 
 
 def _parse_price(text: str) -> float | None:
@@ -26,27 +23,26 @@ def _parse_price(text: str) -> float | None:
 
 
 def _parse_area(text: str) -> float | None:
-    match = re.search(r"([\d\s,]+)\s*m", text)
-    if match:
-        raw = re.sub(r"[\s,]", "", match.group(1))
-        try:
-            return float(raw)
-        except ValueError:
-            pass
-    return None
+    digits = re.sub(r"[^\d,.]", "", text.replace(",", ".").split("m")[0])
+    try:
+        return float(digits) if digits else None
+    except ValueError:
+        return None
 
 
 class NieruchomosciOnlineScraper(BaseScraper):
     """Scraper for nieruchomosci-online.pl.
 
-    Parses HTML listing cards from the search results page.
+    Uses the per-city subdomain URL (e.g. liszki.nieruchomosci-online.pl/dzialki/)
+    which renders plot listings as static HTML — no JavaScript needed.
     """
 
     def fetch_listings(self) -> list[Listing]:
         """Fetch listings from nieruchomosci-online.pl for all configured municipalities."""
         results: list[Listing] = []
         for municipality in MUNICIPALITIES:
-            url = _build_url(municipality)
+            subdomain = _MUNICIPALITY_SUBDOMAINS.get(municipality, municipality.lower())
+            url = _BASE_URL.format(subdomain=subdomain)
             try:
                 response = self._get(url)
                 listings = self._parse(response.text)
@@ -61,57 +57,65 @@ class NieruchomosciOnlineScraper(BaseScraper):
         return results
 
     def _parse(self, html: str) -> list[Listing]:
-        """Parse listing cards from the search results page.
+        """Parse listing tiles from the city subdomain page.
 
         Args:
-            html: Raw HTML of the search results page.
+            html: Raw HTML of the plots listing page.
 
         Returns:
             List of parsed :class:`Listing` objects.
         """
         soup = BeautifulSoup(html, "lxml")
-        cards = soup.select(".single-offer, .offer-card, article.listing")
+        # Exclude promoted investment tiles
+        tiles = soup.select(".tile:not(.tile-investment)")
         listings: list[Listing] = []
-        for card in cards:
+        for tile in tiles:
             try:
-                listing = self._parse_card(card)
+                listing = self._parse_tile(tile)
                 if listing:
                     listings.append(listing)
             except Exception as exc:
-                self.logger.debug("nieruchomosci-online.pl: skipping card: %s", exc)
+                self.logger.debug(
+                    "nieruchomosci-online.pl: skipping tile %s: %s",
+                    tile.get("data-id"), exc,
+                )
         return listings
 
-    def _parse_card(self, card) -> Listing | None:
-        """Convert a BeautifulSoup card tag to a :class:`Listing`.
+    def _parse_tile(self, tile) -> Listing | None:
+        """Convert a tile tag to a :class:`Listing`.
+
+        Tile structure (confirmed against live site):
+          h2.name > a[href]          — title + URL
+          p.title-a > span:first     — price (e.g. "8 200 000 zł")
+          span.area                  — area  (e.g. "8 200 m²")
+          p.province > span          — city name
 
         Args:
-            card: A listing card tag from the search results.
+            tile: A ``.tile`` div from the search results page.
 
         Returns:
             A :class:`Listing`, or ``None`` if required fields are missing.
         """
-        anchor = card.select_one("a.offer-title, h2 a, h3 a, .title a")
+        listing_id = tile.get("data-id", "").strip()
+
+        anchor = tile.select_one("h2.name a[href]")
         if not anchor:
             return None
-
         url = anchor.get("href", "")
         if not url.startswith("https://"):
-            url = f"https://www.nieruchomosci-online.pl{url}" if url.startswith("/") else ""
-        if not url.startswith("https://"):
             return None
-
-        listing_id = url.rstrip("/").split("/")[-1].split(",")[-1]
 
         title = anchor.get_text(strip=True)
 
-        price_tag = card.select_one(".price, .offer-price, [class*='price']")
+        # Price: first <span> inside .title-a (second span is price-per-m²)
+        price_tag = tile.select_one("p.title-a span")
         price = _parse_price(price_tag.get_text()) if price_tag else None
 
-        area_tag = card.select_one(".area, .offer-area, [class*='area'], [class*='surface']")
+        area_tag = tile.select_one("span.area")
         area = _parse_area(area_tag.get_text()) if area_tag else None
 
-        location_tag = card.select_one(".location, .address, [class*='location']")
-        location = location_tag.get_text(strip=True) if location_tag else ""
+        location_tag = tile.select_one("p.province span")
+        location = location_tag.get_text(strip=True).rstrip(",") if location_tag else ""
 
         return Listing(
             id=f"nieruchomosci_online_{listing_id}",

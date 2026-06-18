@@ -1,47 +1,44 @@
 """Scraper for gratka.pl building plot listings."""
+from __future__ import annotations
+
 import re
-from urllib.parse import urlencode
 
 from bs4 import BeautifulSoup
 
 from config import MUNICIPALITIES
 from .base import BaseScraper, Listing
 
-_BASE_URL = "https://gratka.pl/nieruchomosci/sprzedaz/dzialki-budowlane"
+_MUNICIPALITY_SLUGS: dict[str, str] = {
+    "Liszki": "gmina-liszki",
+    "Czernichów": "gmina-czernichow",
+}
 
-
-def _build_url(municipality: str) -> str:
-    params = urlencode({"lokalizacja_miejscowosc_core": municipality})
-    return f"{_BASE_URL}?{params}"
+_BASE_URL = "https://gratka.pl/nieruchomosci/{municipality}"
 
 
 def _parse_price(text: str) -> float | None:
-    """Extract a numeric price from a string like '250 000 zł'."""
     digits = re.sub(r"[^\d]", "", text)
     return float(digits) if digits else None
 
 
 def _parse_area(text: str) -> float | None:
-    """Extract area in m² from a string like '1 200 m²'."""
-    match = re.search(r"[\d\s]+", text)
-    if match:
-        digits = re.sub(r"\s", "", match.group())
-        return float(digits) if digits else None
-    return None
+    digits = re.sub(r"[^\d]", "", text.split("m")[0])
+    return float(digits) if digits else None
 
 
 class GratkaScraper(BaseScraper):
     """Scraper for gratka.pl.
 
-    Fetches building plot listings by querying the site's search with the
-    municipality name and parsing the returned HTML.
+    Fetches all listings for the municipality page and filters to plots
+    (działka) by checking the listing URL slug.
     """
 
     def fetch_listings(self) -> list[Listing]:
-        """Fetch listings from gratka.pl for all configured municipalities."""
+        """Fetch plot listings from gratka.pl for all configured municipalities."""
         results: list[Listing] = []
         for municipality in MUNICIPALITIES:
-            url = _build_url(municipality)
+            slug = _MUNICIPALITY_SLUGS.get(municipality, municipality.lower())
+            url = _BASE_URL.format(municipality=slug)
             try:
                 response = self._get(url)
                 listings = self._parse(response.text)
@@ -56,59 +53,83 @@ class GratkaScraper(BaseScraper):
         return results
 
     def _parse(self, html: str) -> list[Listing]:
-        """Parse listing cards from the search results page.
+        """Parse plot cards from the municipality listing page.
 
         Args:
-            html: Raw HTML of the search results page.
+            html: Raw HTML of the municipality listings page.
 
         Returns:
-            List of parsed :class:`Listing` objects.
+            List of parsed :class:`Listing` objects (plots only).
         """
         soup = BeautifulSoup(html, "lxml")
-        articles = soup.select("article.offer-item, article.listing__item")
+        cards = soup.select(".card")
         listings: list[Listing] = []
-        for article in articles:
+        for card in cards:
             try:
-                listing = self._parse_article(article)
+                listing = self._parse_card(card)
                 if listing:
                     listings.append(listing)
             except Exception as exc:
-                self.logger.debug("gratka.pl: skipping article: %s", exc)
+                self.logger.debug("gratka.pl: skipping card: %s", exc)
         return listings
 
-    def _parse_article(self, article) -> Listing | None:
-        """Convert a BeautifulSoup article tag to a :class:`Listing`.
+    def _parse_card(self, card) -> Listing | None:
+        """Convert a card tag to a :class:`Listing`, or ``None`` if not a plot.
+
+        Confirmed card structure (live site):
+          a[data-cy='propertyUrl']            — relative href (contains 'dzialka' for plots)
+          a.property-card__link               — accessible title text (includes area, price, location)
+          span.property-card__price--main     — price "2 499 000 zł"
+          span (no class) containing m²       — area "17 000 m²"
 
         Args:
-            article: A ``<article>`` tag from the search results.
+            card: A ``.card`` div from the search results page.
 
         Returns:
-            A :class:`Listing`, or ``None`` if required fields are missing.
+            A :class:`Listing`, or ``None`` if the card is not a plot or is unusable.
         """
-        title_tag = article.select_one("h2 a, .offer-item__title a, .listing__title a")
-        if not title_tag:
+        url_tag = card.select_one("a[data-cy='propertyUrl']")
+        if not url_tag:
             return None
 
-        url = title_tag.get("href", "")
-        if not url.startswith("https://"):
-            url = f"https://gratka.pl{url}" if url.startswith("/") else ""
+        href = url_tag.get("href", "")
+        # Only process plot listings
+        if "dzialka" not in href:
+            return None
+
+        url = f"https://gratka.pl{href}" if href.startswith("/") else href
         if not url.startswith("https://"):
             return None
 
-        listing_id = article.get("data-id") or article.get("id") or url.rstrip("/").split("/")[-1]
+        listing_id = href.rstrip("/").split("/")[-1]
 
-        price_tag = article.select_one(".offer-item__price, .listing__price")
+        # Accessible link text: "Title N m² PRICE Location"
+        title_tag = card.select_one("a.property-card__link")
+        full_text = title_tag.get_text(strip=True) if title_tag else ""
+
+        # Extract price from dedicated span
+        price_tag = card.select_one("span.property-card__price--main")
         price = _parse_price(price_tag.get_text()) if price_tag else None
 
-        area_tag = article.select_one("[data-testid='area'], .offer-item__area, .listing__area")
+        # Area: span with no class whose text ends with m²
+        area_tag = next(
+            (s for s in card.find_all("span") if not s.get("class") and "m²" in s.get_text()),
+            None,
+        )
         area = _parse_area(area_tag.get_text()) if area_tag else None
 
-        location_tag = article.select_one(".offer-item__location, .listing__location, address")
-        location = location_tag.get_text(strip=True) if location_tag else ""
+        # Location: last comma-separated segments of the accessible text
+        # Format: "...title... N m² PRICE city, gmina, powiat, województwo"
+        location_match = re.search(r"\d[\d\s]*zł\s+(.+)$", full_text)
+        location = location_match.group(1).strip() if location_match else ""
+
+        # Title: everything before the area part
+        title_match = re.match(r"^(.+?)\s+\d[\d\s]*m²", full_text)
+        title = title_match.group(1).strip() if title_match else full_text[:80]
 
         return Listing(
             id=f"gratka_{listing_id}",
-            title=title_tag.get_text(strip=True),
+            title=title,
             price=price,
             area_m2=area,
             location=location,
