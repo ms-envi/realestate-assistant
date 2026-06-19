@@ -84,3 +84,32 @@ def test_html_has_table_structure():
 def test_html_empty_listings_still_renders():
     html = _build_html([])
     assert "<strong>0</strong>" in html
+
+
+# --- price drop highlighting ---
+
+def test_row_price_drop_is_red():
+    listing = make_listing(price=90_000.0)
+    row = _build_listing_row(listing, price_drop=True)
+    assert "color:red" in row
+
+def test_row_price_drop_has_arrow():
+    listing = make_listing(price=90_000.0)
+    row = _build_listing_row(listing, price_drop=True)
+    assert "↓" in row
+
+def test_row_no_price_drop_has_no_red():
+    listing = make_listing(price=90_000.0)
+    row = _build_listing_row(listing, price_drop=False)
+    assert "color:red" not in row
+
+def test_build_html_highlights_price_drop_listing():
+    normal = make_listing(id="test_1", price=200_000.0)
+    dropped = make_listing(id="test_2", price=90_000.0)
+    html = _build_html([normal, dropped], price_drop_ids=frozenset(["test_2"]))
+    assert html.count("color:red") == 1
+
+def test_build_html_no_highlights_without_price_drop_ids():
+    listings = [make_listing(id=f"test_{i}", price=100_000.0) for i in range(3)]
+    html = _build_html(listings)
+    assert "color:red" not in html

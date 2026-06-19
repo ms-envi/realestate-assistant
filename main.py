@@ -120,7 +120,10 @@ def main() -> None:
     to_report = new_listings + cheaper_listings
     if to_report:
         try:
-            notifier.send_new_listings_email(to_report)
+            notifier.send_new_listings_email(
+                to_report,
+                price_drop_ids=frozenset(l.id for l in cheaper_listings),
+            )
         except Exception as exc:
             logger.error("Failed to send notification email: %s", exc)
             sys.exit(1)

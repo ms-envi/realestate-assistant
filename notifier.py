@@ -1,5 +1,6 @@
 """Email notifications via Resend API."""
 import logging
+from typing import FrozenSet
 
 import resend
 
@@ -9,9 +10,11 @@ from scrapers.base import Listing
 logger = logging.getLogger(__name__)
 
 
-def _build_listing_row(listing: Listing) -> str:
-    price_str = f"{listing.price:,.0f} zł".replace(",", " ") if listing.price else "–"
-    area_str = f"{listing.area_m2:,.0f} m²".replace(",", " ") if listing.area_m2 else "–"
+def _build_listing_row(listing: Listing, price_drop: bool = False) -> str:
+    price_str = f"{listing.price:,.0f} zł".replace(",", "\xa0") if listing.price else "–"
+    area_str = f"{listing.area_m2:,.0f} m²".replace(",", "\xa0") if listing.area_m2 else "–"
+    if price_drop:
+        price_str = f"<span style='color:red;font-weight:bold'>{price_str} ↓</span>"
     return (
         f"<tr>"
         f"<td><a href='{listing.url}'>{listing.title}</a></td>"
@@ -23,8 +26,10 @@ def _build_listing_row(listing: Listing) -> str:
     )
 
 
-def _build_html(listings: list[Listing]) -> str:
-    rows = "\n".join(_build_listing_row(l) for l in listings)
+def _build_html(listings: list[Listing], price_drop_ids: FrozenSet[str] = frozenset()) -> str:
+    rows = "\n".join(
+        _build_listing_row(l, price_drop=l.id in price_drop_ids) for l in listings
+    )
     return f"""
 <html><body>
 <h2>Nowe działki budowlane — Liszki / Czernichów</h2>
@@ -72,14 +77,18 @@ def _send(subject: str, html_body: str) -> None:
     logger.info("Email sent to %s: %s", NOTIFY_EMAIL, subject)
 
 
-def send_new_listings_email(listings: list[Listing]) -> None:
+def send_new_listings_email(
+    listings: list[Listing],
+    price_drop_ids: FrozenSet[str] = frozenset(),
+) -> None:
     """Send an email summarising newly found listings.
 
     Args:
-        listings: New listings to include in the email.
+        listings: All listings to include (new and price-dropped).
+        price_drop_ids: IDs of listings whose price dropped — shown in red.
     """
     subject = f"Nowe działki ({len(listings)}) — Liszki / Czernichów"
-    _send(subject, _build_html(listings))
+    _send(subject, _build_html(listings, price_drop_ids))
 
 
 def send_warning_email(message: str) -> None:
