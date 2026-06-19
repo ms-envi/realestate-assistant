@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-addopts = "--cov=. --cov-report=term-missing --cov-report=html:htmlcov"
+addopts = "--cov=. --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml"
 
 [tool.coverage.run]
 source = ["."]
