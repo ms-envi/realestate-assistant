@@ -56,6 +56,22 @@ def passes_filter(listing: Listing) -> bool:
     return True
 
 
+def is_price_drop(listing: Listing, seen_prices: dict) -> bool:
+    """Return True if the listing was seen before and its price has dropped.
+
+    Args:
+        listing: Current listing data from the scraper.
+        seen_prices: Mapping of listing ID to last known price from storage.
+    """
+    last_price = seen_prices.get(listing.id)
+    return (
+        listing.id in seen_prices
+        and listing.price is not None
+        and last_price is not None
+        and listing.price < last_price
+    )
+
+
 def run_scrapers() -> list[Listing]:
     """Run all scrapers, collecting results and tolerating individual failures.
 
@@ -78,8 +94,8 @@ def main() -> None:
     logger.info("Starting realestate-assistant run")
 
     storage.init_db()
-    seen_ids = storage.get_seen_ids()
-    logger.debug("Known listings in storage: %d", len(seen_ids))
+    seen_prices = storage.get_seen_prices()
+    logger.debug("Known listings in storage: %d", len(seen_prices))
 
     all_listings = run_scrapers()
     logger.info("Total listings found across all scrapers: %d", len(all_listings))
@@ -97,18 +113,22 @@ def main() -> None:
             logger.error("Failed to send warning email: %s", exc)
         sys.exit(0)
 
-    new_listings = [l for l in filtered_listings if l.id not in seen_ids]
-    logger.info("New listings (not seen before): %d", len(new_listings))
+    new_listings = [l for l in filtered_listings if l.id not in seen_prices]
+    cheaper_listings = [l for l in filtered_listings if is_price_drop(l, seen_prices)]
+    logger.info("New listings: %d, price drops: %d", len(new_listings), len(cheaper_listings))
 
-    if new_listings:
+    to_report = new_listings + cheaper_listings
+    if to_report:
         try:
-            notifier.send_new_listings_email(new_listings)
+            notifier.send_new_listings_email(to_report)
         except Exception as exc:
             logger.error("Failed to send notification email: %s", exc)
             sys.exit(1)
         storage.save_listings(new_listings)
+        for listing in cheaper_listings:
+            storage.update_listing_price(listing.id, listing.price)
     else:
-        logger.info("No new listings — nothing to send")
+        logger.info("No new listings or price drops — nothing to send")
 
     logger.info("Run complete")
 

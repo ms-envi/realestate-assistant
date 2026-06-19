@@ -2,6 +2,7 @@
 import logging
 import sqlite3
 from datetime import datetime
+from typing import Optional
 
 from config import DB_PATH
 from scrapers.base import Listing
@@ -14,9 +15,12 @@ CREATE TABLE IF NOT EXISTS seen_listings (
     source      TEXT NOT NULL,
     url         TEXT NOT NULL,
     title       TEXT,
+    price       REAL,
     first_seen_at TEXT NOT NULL
 )
 """
+
+_ADD_PRICE_COLUMN = "ALTER TABLE seen_listings ADD COLUMN price REAL"
 
 
 def _connect() -> sqlite3.Connection:
@@ -26,21 +30,28 @@ def _connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create the database schema if it does not already exist."""
+    """Create the database schema if it does not already exist.
+
+    Also migrates existing databases by adding the ``price`` column when absent.
+    """
     with _connect() as conn:
         conn.execute(_CREATE_TABLE)
+        try:
+            conn.execute(_ADD_PRICE_COLUMN)
+        except sqlite3.OperationalError:
+            pass  # column already exists
     logger.debug("Storage initialised at %s", DB_PATH)
 
 
-def get_seen_ids() -> set[str]:
-    """Return the set of listing IDs that have been seen in previous runs.
+def get_seen_prices() -> dict[str, Optional[float]]:
+    """Return a mapping of listing ID to the last known price for all seen listings.
 
     Returns:
-        Set of ID strings (e.g. ``"otodom_12345"``).
+        Dict mapping ID string to price (``None`` if price was unknown when saved).
     """
     with _connect() as conn:
-        rows = conn.execute("SELECT id FROM seen_listings").fetchall()
-    return {row["id"] for row in rows}
+        rows = conn.execute("SELECT id, price FROM seen_listings").fetchall()
+    return {row["id"]: row["price"] for row in rows}
 
 
 def save_listings(listings: list[Listing]) -> None:
@@ -60,14 +71,30 @@ def save_listings(listings: list[Listing]) -> None:
             listing.source,
             listing.url,
             listing.title,
+            listing.price,
             listing.seen_at.isoformat(),
         )
         for listing in listings
     ]
     with _connect() as conn:
         conn.executemany(
-            "INSERT OR IGNORE INTO seen_listings (id, source, url, title, first_seen_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO seen_listings (id, source, url, title, price, first_seen_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             rows,
         )
     logger.info("Saved %d new listing(s) to storage", len(listings))
+
+
+def update_listing_price(listing_id: str, price: Optional[float]) -> None:
+    """Update the stored price for a listing whose price has dropped.
+
+    Args:
+        listing_id: The listing ID to update.
+        price: The new (lower) price.
+    """
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE seen_listings SET price = ? WHERE id = ?",
+            (price, listing_id),
+        )
+    logger.info("Price updated for %s → %s zł", listing_id, price)
