@@ -25,9 +25,9 @@ def _env_float(name: str, default=None):
 
 
 # Listing filters — applied after scraping, before email/storage
-# Override via environment variables; unset = no limit
-MAX_PRICE   = _env_float("MAX_PRICE",   500_000)   # zł
-MIN_AREA_M2 = _env_float("MIN_AREA_M2", 1_500)     # m²
+# Override via environment variables; unset = use default
+MAX_PRICE   = _env_float("MAX_PRICE",   500_000)   # zł; set to empty to disable
+MIN_AREA_M2 = _env_float("MIN_AREA_M2", 1_500)     # m²; set to empty to disable
 # Locations (substring match) that are exempt from price/area filters
 FILTER_EXEMPT_LOCATIONS = ["Rączna", "Ściejowice"]
 # All villages in gmina Liszki and gmina Czernichów (powiat krakowski).

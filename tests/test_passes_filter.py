@@ -128,7 +128,5 @@ def test_sanka_passes():
     assert passes_filter(make_listing(location="Sanka")) is True
 
 def test_exempt_location_bypasses_location_check():
-    # Rączna is in ALLOWED_LOCATIONS too, but the exempt path must trigger
-    # even for a location that is NOT in ALLOWED_LOCATIONS
     listing = make_listing(location="Rączna", price=9_999_999.0, area_m2=1.0)
     assert passes_filter(listing) is True
