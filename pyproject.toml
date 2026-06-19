@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+addopts = "--cov=. --cov-report=term-missing --cov-report=html:htmlcov"
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "htmlcov/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:",
+]
