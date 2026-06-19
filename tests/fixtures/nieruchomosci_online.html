@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<body>
+<!-- Valid listing -->
+<div class="tile" data-id="789">
+  <h2 class="name">
+    <a href="https://liszki.nieruchomosci-online.pl/dzialki/789.html">Działka budowlana Liszki</a>
+  </h2>
+  <p class="title-a">
+    <span>150 000 zł</span>
+    <span>60 zł/m²</span>
+  </p>
+  <span class="area">2 500 m²</span>
+  <p class="province"><span>Liszki,</span></p>
+</div>
+
+<!-- Investment tile — should be excluded by .tile:not(.tile-investment) selector -->
+<div class="tile tile-investment" data-id="000">
+  <h2 class="name">
+    <a href="https://liszki.nieruchomosci-online.pl/dzialki/000.html">Inwestycja deweloperska</a>
+  </h2>
+</div>
+
+<!-- Listing with no price or area -->
+<div class="tile" data-id="321">
+  <h2 class="name">
+    <a href="https://czernichow.nieruchomosci-online.pl/dzialki/321.html">Działka Czernichów</a>
+  </h2>
+  <p class="province"><span>Czernichów,</span></p>
+</div>
+
+<!-- Tile with relative URL — should be skipped (url must start with https://) -->
+<div class="tile" data-id="000bad">
+  <h2 class="name">
+    <a href="/dzialki/bad.html">Zły URL</a>
+  </h2>
+</div>
+
+<!-- Tile with no anchor — should be skipped -->
+<div class="tile" data-id="noanchor">
+  <h2 class="name"></h2>
+</div>
+</body>
+</html>

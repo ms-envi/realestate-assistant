@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<body>
+<!-- Valid plot listing -->
+<div class="card">
+  <a data-cy="propertyUrl" href="/nieruchomosci/dzialka-budowlana/liszki-abc123.html"></a>
+  <a class="property-card__link">Działka budowlana Liszki 2 500 m² 150 000 zł Liszki, gmina Liszki, powiat krakowski</a>
+  <span class="property-card__price--main">150 000 zł</span>
+  <span>2 500 m²</span>
+</div>
+
+<!-- Non-plot listing (no 'dzialka' in URL) — should be skipped -->
+<div class="card">
+  <a data-cy="propertyUrl" href="/nieruchomosci/dom/czernichow-xyz999.html"></a>
+  <a class="property-card__link">Dom Czernichów 100 m² 500 000 zł Czernichów</a>
+  <span class="property-card__price--main">500 000 zł</span>
+</div>
+
+<!-- Plot with no price span -->
+<div class="card">
+  <a data-cy="propertyUrl" href="/nieruchomosci/dzialka-budowlana/czernichow-yyy456.html"></a>
+  <a class="property-card__link">Działka Czernichów 3 200 m² Czernichów, gmina Czernichów</a>
+  <span>3 200 m²</span>
+</div>
+
+<!-- Card with no propertyUrl anchor — should be skipped -->
+<div class="card">
+  <a class="property-card__link">Brakuje linku</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<body>
+<!-- Valid listing with price and area -->
+<div data-cy="l-card" id="123456">
+  <div data-testid="ad-card-title">
+    <a href="/oferta/dzialka-budowlana-liszki-123456.html">
+      <h4>Działka budowlana Liszki</h4>
+    </a>
+  </div>
+  <div data-testid="ad-price">150 000 zł</div>
+  <div data-testid="location-date">Liszki - Odświeżono dzisiaj o 10:00</div>
+  <span>2 500 m² - 60 zł/m²</span>
+</div>
+
+<!-- Listing with absolute URL (should not prepend domain) -->
+<div data-cy="l-card" id="654321">
+  <div data-testid="ad-card-title">
+    <a href="https://www.olx.pl/oferta/inna-dzialka-654321.html">
+      <h4>Inna działka Czernichów</h4>
+    </a>
+  </div>
+  <div data-testid="ad-price">200 000 zł</div>
+  <div data-testid="location-date">Czernichów - Dodano 3 dni temu</div>
+  <span>3 000 m²</span>
+</div>
+
+<!-- Listing with no price and no area -->
+<div data-cy="l-card" id="999999">
+  <div data-testid="ad-card-title">
+    <a href="/oferta/dzialka-bez-ceny-999999.html">
+      <h4>Działka bez ceny</h4>
+    </a>
+  </div>
+  <div data-testid="location-date">Liszki - Dodano 1 dzień temu</div>
+</div>
+
+<!-- Card with no id — should be skipped -->
+<div data-cy="l-card">
+  <div data-testid="ad-card-title">
+    <a href="/oferta/bez-id.html"><h4>Bez ID</h4></a>
+  </div>
+</div>
+
+<!-- Card with no anchor — should be skipped -->
+<div data-cy="l-card" id="000001">
+  <div data-testid="ad-card-title"></div>
+</div>
+</body>
+</html>

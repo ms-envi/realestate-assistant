@@ -4,7 +4,7 @@ import sys
 
 import notifier
 import storage
-from config import FILTER_EXEMPT_LOCATIONS, MAX_PRICE, MIN_AREA_M2
+from config import ALLOWED_LOCATIONS, FILTER_EXEMPT_LOCATIONS, MAX_PRICE, MIN_AREA_M2
 from scrapers import (
     AdresowoScraper,
     GratkaScraper,
@@ -31,14 +31,21 @@ _SCRAPERS = [
 
 
 def passes_filter(listing: Listing) -> bool:
-    """Return True if the listing should be included after applying price/area filters.
+    """Return True if the listing should be included after applying all filters.
 
-    Listings in exempt locations (Rączna, Ściejowice) always pass.
-    Listings with unknown price or area also pass — we don't penalise missing data.
+    Listings in exempt locations (Rączna, Ściejowice) bypass price/area checks.
+    All other listings must have a location matching one of the known villages in
+    gmina Liszki or gmina Czernichów, and must satisfy price/area thresholds.
+    Listings with unknown price or area pass those thresholds — we don't penalise
+    missing data.
     """
     location = listing.location.lower()
+
     if any(exempt.lower() in location for exempt in FILTER_EXEMPT_LOCATIONS):
         return True
+
+    if not any(allowed.lower() in location for allowed in ALLOWED_LOCATIONS):
+        return False
 
     if listing.price is not None and listing.price > MAX_PRICE:
         return False

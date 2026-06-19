@@ -109,8 +109,8 @@ class OtodomScraper(BaseScraper):
 
         location_data = item.get("location", {}).get("address", {})
         location = (
-            location_data.get("city", {}).get("name")
-            or location_data.get("county", {}).get("name")
+            (location_data.get("city") or {}).get("name")
+            or (location_data.get("county") or {}).get("name")
             or ""
         )
 

@@ -22,5 +22,19 @@ DB_PATH = os.environ.get("DB_PATH", "listings.db")
 # Listing filters — applied after scraping, before email/storage
 MAX_PRICE = 500_000          # zł; None = no limit
 MIN_AREA_M2 = 1_500          # m²; None = no limit
-# Locations (substring match) that are exempt from all filters
+# Locations (substring match) that are exempt from price/area filters
 FILTER_EXEMPT_LOCATIONS = ["Rączna", "Ściejowice"]
+# All villages in gmina Liszki and gmina Czernichów (powiat krakowski).
+# A listing whose location matches none of these is filtered out.
+ALLOWED_LOCATIONS = [
+    # gmina Liszki
+    "Baczyn", "Budzyń", "Cholerzyn", "Chrosna", "Czułów", "Jeziorzany",
+    "Kaszów", "Kryspinów", "Liszki", "Mników", "Morawica",
+    "Piekary", "Rączna", "Ściejowice",
+    # gmina Czernichów
+    "Czernichów", "Czułówek", "Dąbrowa Szlachecka", "Kamień",
+    "Kłokoczyn", "Nowa Wieś Szlachecka", "Przeginia Duchowna",
+    "Przeginia Narodowa", "Rybna", "Rusocice", "Wołowice", "Zagacie",
+    # inne miejscowości w okolicy
+    "Sanka",
+]

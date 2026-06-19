@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<body>
+<!-- Valid listing: anchor → h2 → div.flex → div.isolate → div.relative -->
+<div class="relative">
+  <div class="isolate">
+    <p>150 000 zł</p>
+    <p>2 500 m²</p>
+    <div class="flex">
+      <h2>
+        <a href="/o/abc123">Liszki | gmina Liszki</a>
+      </h2>
+    </div>
+  </div>
+</div>
+
+<!-- Listing with no price and no area -->
+<div class="relative">
+  <div class="isolate">
+    <div class="flex">
+      <h2>
+        <a href="/o/xyz789">Czernichów | gmina Czernichów</a>
+      </h2>
+    </div>
+  </div>
+</div>
+
+<!-- An anchor not starting with /o/ — should not be picked up -->
+<a href="/search/something">Nie dotyczy</a>
+</body>
+</html>
