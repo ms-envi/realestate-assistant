@@ -19,9 +19,15 @@ NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL", "")
 
 DB_PATH = os.environ.get("DB_PATH", "listings.db")
 
+def _env_float(name: str, default=None):
+    val = os.environ.get(name)
+    return float(val) if val is not None else default
+
+
 # Listing filters — applied after scraping, before email/storage
-MAX_PRICE = 500_000          # zł; None = no limit
-MIN_AREA_M2 = 1_500          # m²; None = no limit
+# Override via environment variables; unset = no limit
+MAX_PRICE   = _env_float("MAX_PRICE",   500_000)   # zł
+MIN_AREA_M2 = _env_float("MIN_AREA_M2", 1_500)     # m²
 # Locations (substring match) that are exempt from price/area filters
 FILTER_EXEMPT_LOCATIONS = ["Rączna", "Ściejowice"]
 # All villages in gmina Liszki and gmina Czernichów (powiat krakowski).

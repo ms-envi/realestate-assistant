@@ -55,6 +55,11 @@ def test_missing_price_passes():
     listing = make_listing(price=None, area_m2=2000.0)
     assert passes_filter(listing) is True
 
+def test_max_price_none_disables_price_filter(monkeypatch):
+    monkeypatch.setattr("main.MAX_PRICE", None)
+    listing = make_listing(price=9_999_999.0, area_m2=2000.0)
+    assert passes_filter(listing) is True
+
 
 # --- Area filter ---
 
@@ -72,6 +77,11 @@ def test_listing_over_min_area_passes():
 
 def test_missing_area_passes():
     listing = make_listing(price=100_000.0, area_m2=None)
+    assert passes_filter(listing) is True
+
+def test_min_area_none_disables_area_filter(monkeypatch):
+    monkeypatch.setattr("main.MIN_AREA_M2", None)
+    listing = make_listing(price=100_000.0, area_m2=1.0)
     assert passes_filter(listing) is True
 
 

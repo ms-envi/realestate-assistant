@@ -22,6 +22,10 @@ export RESEND_API_KEY=...
 export RESEND_FROM=alerts@yourdomain.com
 export NOTIFY_EMAIL=you@example.com
 
+# Optional filters (these are the defaults; unset the variable to remove the limit)
+export MAX_PRICE=500000    # reject listings above this price (zł)
+export MIN_AREA_M2=1500    # reject listings below this area (m²)
+
 python main.py
 ```
 

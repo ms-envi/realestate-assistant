@@ -47,10 +47,10 @@ def passes_filter(listing: Listing) -> bool:
     if not any(allowed.lower() in location for allowed in ALLOWED_LOCATIONS):
         return False
 
-    if listing.price is not None and listing.price > MAX_PRICE:
+    if listing.price is not None and MAX_PRICE is not None and listing.price > MAX_PRICE:
         return False
 
-    if listing.area_m2 is not None and listing.area_m2 < MIN_AREA_M2:
+    if listing.area_m2 is not None and MIN_AREA_M2 is not None and listing.area_m2 < MIN_AREA_M2:
         return False
 
     return True
