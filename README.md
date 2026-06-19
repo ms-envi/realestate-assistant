@@ -1,4 +1,4 @@
-# realestate-assistant
+# 🏠 Real Estate Assistant
 
 [![Tests](https://github.com/ms-envi/realestate-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/ms-envi/realestate-assistant/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ms-envi/realestate-assistant/graph/badge.svg)](https://codecov.io/gh/ms-envi/realestate-assistant)
