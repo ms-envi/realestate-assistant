@@ -15,6 +15,7 @@ _MUNICIPALITY_SUBDOMAINS: dict[str, str] = {
 }
 
 _BASE_URL = "https://{subdomain}.nieruchomosci-online.pl/dzialki/"
+_MAX_PAGES = 20
 
 
 def _parse_price(text: str) -> float | None:
@@ -38,22 +39,31 @@ class NieruchomosciOnlineScraper(BaseScraper):
     """
 
     def fetch_listings(self) -> list[Listing]:
-        """Fetch listings from nieruchomosci-online.pl for all configured municipalities."""
+        """Fetch listings from nieruchomosci-online.pl for all configured municipalities, across all pages."""
         results: list[Listing] = []
         for municipality in MUNICIPALITIES:
             subdomain = _MUNICIPALITY_SUBDOMAINS.get(municipality, municipality.lower())
-            url = _BASE_URL.format(subdomain=subdomain)
-            try:
-                response = self._get(url)
-                listings = self._parse(response.text)
-                self.logger.info(
-                    "nieruchomosci-online.pl: %d listings in %s", len(listings), municipality
-                )
-                results.extend(listings)
-            except Exception as exc:
-                self.logger.error(
-                    "nieruchomosci-online.pl: failed to fetch %s: %s", municipality, exc
-                )
+            base_url = _BASE_URL.format(subdomain=subdomain)
+            page = 1
+            while page <= _MAX_PAGES:
+                url = base_url if page == 1 else f"{base_url}?page={page}"
+                try:
+                    response = self._get(url)
+                    listings = self._parse(response.text)
+                    self.logger.info(
+                        "nieruchomosci-online.pl: %d listings on page %d in %s",
+                        len(listings), page, municipality,
+                    )
+                    if not listings:
+                        break
+                    results.extend(listings)
+                    page += 1
+                except Exception as exc:
+                    self.logger.error(
+                        "nieruchomosci-online.pl: failed to fetch %s page %d: %s",
+                        municipality, page, exc,
+                    )
+                    break
         return results
 
     def _parse(self, html: str) -> list[Listing]:

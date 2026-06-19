@@ -30,23 +30,52 @@ class OtodomScraper(BaseScraper):
     """
 
     def fetch_listings(self) -> list[Listing]:
-        """Fetch listings from otodom.pl for all configured municipalities."""
+        """Fetch listings from otodom.pl for all configured municipalities, across all pages."""
         results: list[Listing] = []
         for municipality in MUNICIPALITIES:
             slug = _MUNICIPALITY_SLUGS.get(municipality, municipality.lower())
-            url = _BASE_URL.format(municipality=slug)
-            try:
-                response = self._get(url)
-                listings = self._parse(response.text)
-                self.logger.info(
-                    "otodom.pl: %d listings in %s", len(listings), municipality
-                )
-                results.extend(listings)
-            except Exception as exc:
-                self.logger.error(
-                    "otodom.pl: failed to fetch %s: %s", municipality, exc
-                )
+            base_url = _BASE_URL.format(municipality=slug)
+            page = 1
+            while True:
+                url = base_url if page == 1 else f"{base_url}?page={page}"
+                try:
+                    response = self._get(url)
+                    listings = self._parse(response.text)
+                    total = self._parse_total_pages(response.text)
+                    self.logger.info(
+                        "otodom.pl: %d listings on page %d/%d in %s",
+                        len(listings), page, total, municipality,
+                    )
+                    results.extend(listings)
+                    if page >= total:
+                        break
+                    page += 1
+                except Exception as exc:
+                    self.logger.error(
+                        "otodom.pl: failed to fetch %s page %d: %s", municipality, page, exc
+                    )
+                    break
         return results
+
+    def _parse_next_data(self, html: str) -> dict:
+        """Parse the ``__NEXT_DATA__`` JSON embedded in the page.
+
+        Args:
+            html: Raw HTML of the search results page.
+
+        Returns:
+            Parsed JSON dict, or ``{}`` on any failure.
+        """
+        soup = BeautifulSoup(html, "lxml")
+        tag = soup.find("script", id="__NEXT_DATA__")
+        if not tag:
+            self.logger.warning("otodom.pl: __NEXT_DATA__ not found in page")
+            return {}
+        try:
+            return json.loads(tag.string or "")
+        except (json.JSONDecodeError, AttributeError) as exc:
+            self.logger.error("otodom.pl: JSON parse error: %s", exc)
+            return {}
 
     def _parse(self, html: str) -> list[Listing]:
         """Parse listings from the Next.js page payload.
@@ -57,24 +86,14 @@ class OtodomScraper(BaseScraper):
         Returns:
             List of parsed :class:`Listing` objects.
         """
-        soup = BeautifulSoup(html, "lxml")
-        tag = soup.find("script", id="__NEXT_DATA__")
-        if not tag:
-            self.logger.warning("otodom.pl: __NEXT_DATA__ not found in page")
-            return []
-
-        try:
-            data = json.loads(tag.string or "")
-            items: list[dict] = (
-                data.get("props", {})
-                    .get("pageProps", {})
-                    .get("data", {})
-                    .get("searchAds", {})
-                    .get("items", [])
-            )
-        except (json.JSONDecodeError, AttributeError) as exc:
-            self.logger.error("otodom.pl: JSON parse error: %s", exc)
-            return []
+        data = self._parse_next_data(html)
+        items: list[dict] = (
+            data.get("props", {})
+                .get("pageProps", {})
+                .get("data", {})
+                .get("searchAds", {})
+                .get("items", [])
+        )
 
         listings: list[Listing] = []
         for item in items:
@@ -85,6 +104,25 @@ class OtodomScraper(BaseScraper):
             except Exception as exc:
                 self.logger.debug("otodom.pl: skipping item %s: %s", item.get("id"), exc)
         return listings
+
+    def _parse_total_pages(self, html: str) -> int:
+        """Extract the total number of result pages from the page payload.
+
+        Args:
+            html: Raw HTML of the search results page.
+
+        Returns:
+            Total page count, or 1 when the field is absent or unparseable.
+        """
+        data = self._parse_next_data(html)
+        pagination = (
+            data.get("props", {})
+                .get("pageProps", {})
+                .get("data", {})
+                .get("searchAds", {})
+                .get("pagination", {})
+        )
+        return int(pagination.get("totalPages", 1))
 
     def _parse_item(self, item: dict) -> Listing | None:
         """Convert a raw JSON item to a :class:`Listing`.

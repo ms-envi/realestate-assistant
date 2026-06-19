@@ -14,6 +14,7 @@ _MUNICIPALITY_SLUGS: dict[str, str] = {
 }
 
 _BASE_URL = "https://adresowo.pl/dzialki/{municipality}/"
+_MAX_PAGES = 20
 
 
 class AdresowoScraper(BaseScraper):
@@ -25,22 +26,29 @@ class AdresowoScraper(BaseScraper):
     """
 
     def fetch_listings(self) -> list[Listing]:
-        """Fetch listings from adresowo.pl for all configured municipalities."""
+        """Fetch listings from adresowo.pl for all configured municipalities, across all pages."""
         results: list[Listing] = []
         for municipality in MUNICIPALITIES:
             slug = _MUNICIPALITY_SLUGS.get(municipality, municipality.lower())
-            url = _BASE_URL.format(municipality=slug)
-            try:
-                response = self._get(url)
-                listings = self._parse(response.text)
-                self.logger.info(
-                    "adresowo.pl: %d listings in %s", len(listings), municipality
-                )
-                results.extend(listings)
-            except Exception as exc:
-                self.logger.error(
-                    "adresowo.pl: failed to fetch %s: %s", municipality, exc
-                )
+            base_url = _BASE_URL.format(municipality=slug)
+            page = 1
+            while page <= _MAX_PAGES:
+                url = base_url if page == 1 else f"{base_url}?page={page}"
+                try:
+                    response = self._get(url)
+                    listings = self._parse(response.text)
+                    self.logger.info(
+                        "adresowo.pl: %d listings on page %d in %s", len(listings), page, municipality
+                    )
+                    if not listings:
+                        break
+                    results.extend(listings)
+                    page += 1
+                except Exception as exc:
+                    self.logger.error(
+                        "adresowo.pl: failed to fetch %s page %d: %s", municipality, page, exc
+                    )
+                    break
         return results
 
     def _parse(self, html: str) -> list[Listing]:

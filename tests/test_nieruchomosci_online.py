@@ -84,3 +84,36 @@ def test_parse_location_trailing_comma_stripped(listings):
 def test_parse_source(listings):
     for listing in listings:
         assert listing.source == "nieruchomosci-online.pl"
+
+
+# --- fetch_listings pagination ---
+
+_EMPTY = "<html></html>"
+
+def test_fetch_listings_paginates_until_empty(mocker):
+    scraper = NieruchomosciOnlineScraper()
+    mocker.patch("scrapers.nieruchomosci_online.MUNICIPALITIES", ["Liszki"])
+    mock_get = mocker.patch.object(
+        scraper, "_get",
+        side_effect=[mocker.Mock(text=FIXTURE.read_text()), mocker.Mock(text=_EMPTY)],
+    )
+    listings = scraper.fetch_listings()
+    assert len(listings) == 2
+    assert mock_get.call_count == 2
+
+def test_fetch_listings_page2_uses_query_param(mocker):
+    scraper = NieruchomosciOnlineScraper()
+    mocker.patch("scrapers.nieruchomosci_online.MUNICIPALITIES", ["Liszki"])
+    mock_get = mocker.patch.object(
+        scraper, "_get",
+        side_effect=[mocker.Mock(text=FIXTURE.read_text()), mocker.Mock(text=_EMPTY)],
+    )
+    scraper.fetch_listings()
+    assert "page=2" in mock_get.call_args_list[1][0][0]
+
+def test_fetch_listings_respects_max_pages(mocker):
+    scraper = NieruchomosciOnlineScraper()
+    mocker.patch("scrapers.nieruchomosci_online.MUNICIPALITIES", ["Liszki"])
+    mock_get = mocker.patch.object(scraper, "_get", return_value=mocker.Mock(text=FIXTURE.read_text()))
+    scraper.fetch_listings()
+    assert mock_get.call_count == 20

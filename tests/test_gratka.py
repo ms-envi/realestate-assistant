@@ -68,3 +68,36 @@ def test_parse_source(listings):
 def test_parse_id_derived_from_href(listings):
     ids = {l.id for l in listings}
     assert "gratka_liszki-abc123.html" in ids or any("abc123" in id_ for id_ in ids)
+
+
+# --- fetch_listings pagination ---
+
+_EMPTY = "<html></html>"
+
+def test_fetch_listings_paginates_until_empty(mocker):
+    scraper = GratkaScraper()
+    mocker.patch("scrapers.gratka.MUNICIPALITIES", ["Liszki"])
+    mock_get = mocker.patch.object(
+        scraper, "_get",
+        side_effect=[mocker.Mock(text=FIXTURE.read_text()), mocker.Mock(text=_EMPTY)],
+    )
+    listings = scraper.fetch_listings()
+    assert len(listings) == 2
+    assert mock_get.call_count == 2
+
+def test_fetch_listings_page2_uses_query_param(mocker):
+    scraper = GratkaScraper()
+    mocker.patch("scrapers.gratka.MUNICIPALITIES", ["Liszki"])
+    mock_get = mocker.patch.object(
+        scraper, "_get",
+        side_effect=[mocker.Mock(text=FIXTURE.read_text()), mocker.Mock(text=_EMPTY)],
+    )
+    scraper.fetch_listings()
+    assert "page=2" in mock_get.call_args_list[1][0][0]
+
+def test_fetch_listings_respects_max_pages(mocker):
+    scraper = GratkaScraper()
+    mocker.patch("scrapers.gratka.MUNICIPALITIES", ["Liszki"])
+    mock_get = mocker.patch.object(scraper, "_get", return_value=mocker.Mock(text=FIXTURE.read_text()))
+    scraper.fetch_listings()
+    assert mock_get.call_count == 20
