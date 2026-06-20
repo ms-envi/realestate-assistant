@@ -1,6 +1,7 @@
 """Entry point: orchestrates scraping, deduplication, and email notification."""
 import logging
 import sys
+from datetime import datetime
 
 import notifier
 import storage
@@ -72,6 +73,22 @@ def is_price_drop(listing: Listing, seen_prices: dict) -> bool:
     )
 
 
+def _dedup(listings: list[Listing]) -> list[Listing]:
+    """Remove duplicate listings by ID, preserving first-occurrence order.
+
+    Needed because some scrapers (adresowo, nieruchomosci-online) ignore the
+    ``?page=N`` param and serve page 1 on every paginated request, causing
+    the same listing to appear N times in a single run.
+    """
+    seen: set[str] = set()
+    result: list[Listing] = []
+    for l in listings:
+        if l.id not in seen:
+            seen.add(l.id)
+            result.append(l)
+    return result
+
+
 def run_scrapers() -> list[Listing]:
     """Run all scrapers, collecting results and tolerating individual failures.
 
@@ -94,10 +111,16 @@ def main() -> None:
     logger.info("Starting realestate-assistant run")
 
     storage.init_db()
+
+    today = datetime.utcnow().date().isoformat()
+    if storage.get_last_email_date() == today:
+        logger.info("Email already sent today (%s) — skipping duplicate run", today)
+        return
+
     seen_prices = storage.get_seen_prices()
     logger.debug("Known listings in storage: %d", len(seen_prices))
 
-    all_listings = run_scrapers()
+    all_listings = _dedup(run_scrapers())
     logger.info("Total listings found across all scrapers: %d", len(all_listings))
 
     filtered_listings = [l for l in all_listings if passes_filter(l)]
@@ -118,6 +141,7 @@ def main() -> None:
     logger.info("New listings: %d, price drops: %d", len(new_listings), len(cheaper_listings))
 
     to_report = new_listings + cheaper_listings
+    to_report.sort(key=lambda l: (l.location.lower(), -(l.price or 0)))
     if to_report:
         try:
             notifier.send_new_listings_email(
@@ -128,6 +152,7 @@ def main() -> None:
             logger.error("Failed to send notification email: %s", exc)
             sys.exit(1)
         storage.save_listings(new_listings)
+        storage.save_last_email_date()
         for listing in cheaper_listings:
             storage.update_listing_price(listing.id, listing.price)
     else:

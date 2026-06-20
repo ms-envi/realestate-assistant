@@ -1,6 +1,7 @@
 """Tests for the OLX scraper parser."""
 import pathlib
 import pytest
+from bs4 import BeautifulSoup
 from scrapers.olx import OlxScraper, _parse_price, _parse_area
 
 FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "olx.html"
@@ -117,3 +118,76 @@ def test_fetch_listings_respects_max_pages(mocker):
     mock_get = mocker.patch.object(scraper, "_get", return_value=mocker.Mock(text=FIXTURE.read_text()))
     scraper.fetch_listings()
     assert mock_get.call_count == 20
+
+
+# --- non-plot filtering ---
+
+def test_parse_card_rejects_house_url(scraper):
+    html = """
+    <div data-cy="l-card" id="999111">
+      <div data-testid="ad-card-title"><a href="/oferta/dom-jednorodzinny-liszki-999111.html"><h4>Dom w Liszkach</h4></a></div>
+      <span data-testid="ad-price">300 000 zł</span>
+      <div data-testid="location-date">Liszki - Dzisiaj</div>
+    </div>
+    """
+    card = BeautifulSoup(html, "lxml").select_one("[data-cy='l-card']")
+    assert scraper._parse_card(card) is None
+
+
+def test_parse_card_accepts_plot_url(scraper):
+    html = """
+    <div data-cy="l-card" id="888222">
+      <div data-testid="ad-card-title"><a href="/oferta/dzialka-budowlana-liszki-888222.html"><h4>Działka budowlana</h4></a></div>
+      <span data-testid="ad-price">150 000 zł</span>
+      <div data-testid="location-date">Liszki - Dzisiaj</div>
+    </div>
+    """
+    card = BeautifulSoup(html, "lxml").select_one("[data-cy='l-card']")
+    listing = scraper._parse_card(card)
+    assert listing is not None
+    assert listing.id == "olx_888222"
+
+
+def test_parse_rejects_non_plot_cards(scraper):
+    html = """
+    <html><body>
+      <div data-cy="l-card" id="111">
+        <div data-testid="ad-card-title"><a href="/oferta/dzialka-liszki-111.html"><h4>Działka</h4></a></div>
+        <div data-testid="location-date">Liszki - Dzisiaj</div>
+      </div>
+      <div data-cy="l-card" id="222">
+        <div data-testid="ad-card-title"><a href="/oferta/mieszkanie-krakow-222.html"><h4>Mieszkanie</h4></a></div>
+        <div data-testid="location-date">Kraków - Dzisiaj</div>
+      </div>
+    </body></html>
+    """
+    listings = scraper._parse(html)
+    assert len(listings) == 1
+    assert listings[0].id == "olx_111"
+
+
+def test_parse_card_rejects_generic_title_no_plot_keyword(scraper):
+    """A listing with a generic title slug (no 'dzialka', 'grunt' etc.) is rejected."""
+    html = """
+    <div data-cy="l-card" id="777333">
+      <div data-testid="ad-card-title"><a href="/oferta/sprzedam-nieruchomosc-liszki-777333.html"><h4>Sprzedam nieruchomość</h4></a></div>
+      <span data-testid="ad-price">200 000 zł</span>
+      <div data-testid="location-date">Liszki - Dzisiaj</div>
+    </div>
+    """
+    card = BeautifulSoup(html, "lxml").select_one("[data-cy='l-card']")
+    assert scraper._parse_card(card) is None
+
+
+def test_parse_card_accepts_grunt_keyword(scraper):
+    """'grunt' in the URL slug is accepted as a plot indicator."""
+    html = """
+    <div data-cy="l-card" id="444555">
+      <div data-testid="ad-card-title"><a href="/oferta/grunt-rolny-czernichow-444555.html"><h4>Grunt rolny</h4></a></div>
+      <div data-testid="location-date">Czernichów - Dzisiaj</div>
+    </div>
+    """
+    card = BeautifulSoup(html, "lxml").select_one("[data-cy='l-card']")
+    listing = scraper._parse_card(card)
+    assert listing is not None
+    assert listing.id == "olx_444555"

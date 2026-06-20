@@ -107,3 +107,30 @@ def test_update_listing_price_to_none(in_memory_db):
     storage.save_listings([make_listing("u2", price=300_000.0)])
     storage.update_listing_price("test_u2", None)
     assert storage.get_seen_prices()["test_u2"] is None
+
+
+# --- get_last_email_date / save_last_email_date ---
+
+def test_get_last_email_date_returns_none_on_fresh_db():
+    assert storage.get_last_email_date() is None
+
+def test_save_and_get_last_email_date():
+    storage.save_last_email_date()
+    from datetime import datetime
+    expected = datetime.utcnow().date().isoformat()
+    assert storage.get_last_email_date() == expected
+
+def test_save_last_email_date_is_idempotent():
+    storage.save_last_email_date()
+    storage.save_last_email_date()
+    from datetime import datetime
+    expected = datetime.utcnow().date().isoformat()
+    assert storage.get_last_email_date() == expected
+
+def test_init_db_creates_meta_table(in_memory_db):
+    tables = {
+        row[0] for row in in_memory_db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    assert "meta" in tables

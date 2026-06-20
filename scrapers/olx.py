@@ -33,6 +33,22 @@ def _parse_area(text: str) -> float | None:
     return float(digits) if digits else None
 
 
+# OLX broadens keyword searches to other categories; reject cards whose URL slug
+# starts with a known non-plot property type word.
+_NON_PLOT_SLUG = re.compile(
+    r"/(dom|mieszkanie|kawalerk|apartament|lokal|garaz|hala|biuro)-",
+    re.IGNORECASE,
+)
+
+# Positive guard: only accept listings whose URL slug contains a plot-related word.
+# q-{municipality} can return site-wide garbage (books, toys, electronics) when OLX
+# finds few category matches and silently broadens the search.
+_PLOT_SLUG_REQUIRED = re.compile(
+    r"dziaLk|grunt|budowlan|parcela",
+    re.IGNORECASE,
+)
+
+
 class OlxScraper(BaseScraper):
     """Scraper for olx.pl building plot listings.
 
@@ -115,6 +131,12 @@ class OlxScraper(BaseScraper):
         href = anchor.get("href", "")
         url = f"https://www.olx.pl{href}" if href.startswith("/") else href
         if not url.startswith("https://"):
+            return None
+        if _NON_PLOT_SLUG.search(url):
+            self.logger.debug("olx.pl: skipping non-plot listing %s", url)
+            return None
+        if not _PLOT_SLUG_REQUIRED.search(url):
+            self.logger.debug("olx.pl: skipping listing with no plot keyword %s", url)
             return None
 
         h4 = card.select_one("h4")

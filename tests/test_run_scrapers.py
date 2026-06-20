@@ -73,3 +73,50 @@ def test_failing_scraper_error_is_logged(monkeypatch, caplog):
 
     assert any("boom" in record.message or "failed" in record.message.lower()
                for record in caplog.records)
+
+
+# --- _dedup ---
+
+def test_dedup_removes_duplicate_ids():
+    l1 = make_listing("dup")
+    l2 = make_listing("dup")  # same id, second occurrence
+    l3 = make_listing("unique")
+    assert [l.id for l in main._dedup([l1, l2, l3])] == ["dup", "unique"]
+
+def test_dedup_preserves_first_occurrence():
+    first = make_listing("x")
+    second = Listing(
+        id="x", title="Other", url="https://example.com/other", source="test", location="Liszki"
+    )
+    result = main._dedup([first, second])
+    assert len(result) == 1
+    assert result[0].title == "Działka"  # first occurrence kept
+
+def test_dedup_empty_list():
+    assert main._dedup([]) == []
+
+def test_dedup_no_duplicates_unchanged():
+    listings = [make_listing("a"), make_listing("b"), make_listing("c")]
+    assert [l.id for l in main._dedup(listings)] == ["a", "b", "c"]
+
+
+# --- sort ---
+
+def test_sort_by_location_then_price_desc():
+    listings = [
+        Listing(id="1", title="T", url="u", source="s", location="Liszki", price=100_000),
+        Listing(id="2", title="T", url="u", source="s", location="Czernichów", price=200_000),
+        Listing(id="3", title="T", url="u", source="s", location="Liszki", price=300_000),
+        Listing(id="4", title="T", url="u", source="s", location="Czernichów", price=None),
+    ]
+    listings.sort(key=lambda l: (l.location.lower(), -(l.price or 0)))
+    assert [l.id for l in listings] == ["2", "4", "3", "1"]
+
+def test_sort_none_price_treated_as_cheapest():
+    listings = [
+        Listing(id="a", title="T", url="u", source="s", location="Liszki", price=500_000),
+        Listing(id="b", title="T", url="u", source="s", location="Liszki", price=None),
+    ]
+    listings.sort(key=lambda l: (l.location.lower(), -(l.price or 0)))
+    assert listings[0].id == "a"
+    assert listings[1].id == "b"

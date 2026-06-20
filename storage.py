@@ -20,6 +20,13 @@ CREATE TABLE IF NOT EXISTS seen_listings (
 )
 """
 
+_CREATE_META = """
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+)
+"""
+
 _ADD_PRICE_COLUMN = "ALTER TABLE seen_listings ADD COLUMN price REAL"
 
 
@@ -36,6 +43,7 @@ def init_db() -> None:
     """
     with _connect() as conn:
         conn.execute(_CREATE_TABLE)
+        conn.execute(_CREATE_META)
         try:
             conn.execute(_ADD_PRICE_COLUMN)
         except sqlite3.OperationalError:
@@ -98,3 +106,26 @@ def update_listing_price(listing_id: str, price: Optional[float]) -> None:
             (price, listing_id),
         )
     logger.info("Price updated for %s → %s zł", listing_id, price)
+
+
+def get_last_email_date() -> Optional[str]:
+    """Return the ISO date (YYYY-MM-DD) when the last email was sent, or None.
+
+    Returns:
+        ISO date string, or ``None`` if no email has been sent yet.
+    """
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT value FROM meta WHERE key = 'last_email_date'"
+        ).fetchone()
+    return row["value"] if row else None
+
+
+def save_last_email_date() -> None:
+    """Record today (UTC) as the date of the most recent email send."""
+    today = datetime.utcnow().date().isoformat()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('last_email_date', ?)",
+            (today,),
+        )
