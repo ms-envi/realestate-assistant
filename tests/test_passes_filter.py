@@ -12,7 +12,7 @@ def make_listing(**kwargs) -> Listing:
         source="test",
         location="Liszki",
         price=None,
-        area_m2=None,
+        area_m2=2000.0,
     )
     defaults.update(kwargs)
     return Listing(**defaults)
@@ -75,9 +75,9 @@ def test_listing_over_min_area_passes():
     listing = make_listing(price=100_000.0, area_m2=3000.0)
     assert passes_filter(listing) is True
 
-def test_missing_area_passes():
+def test_missing_area_rejected():
     listing = make_listing(price=100_000.0, area_m2=None)
-    assert passes_filter(listing) is True
+    assert passes_filter(listing) is False
 
 def test_min_area_none_disables_area_filter(monkeypatch):
     monkeypatch.setattr("main.MIN_AREA_M2", None)
@@ -87,9 +87,9 @@ def test_min_area_none_disables_area_filter(monkeypatch):
 
 # --- Both missing ---
 
-def test_both_missing_passes():
+def test_both_missing_rejected():
     listing = make_listing(price=None, area_m2=None)
-    assert passes_filter(listing) is True
+    assert passes_filter(listing) is False
 
 
 # --- Location allowlist ---

@@ -34,12 +34,14 @@ _SCRAPERS = [
 def passes_filter(listing: Listing) -> bool:
     """Return True if the listing should be included after applying all filters.
 
-    Listings in exempt locations (Rączna, Ściejowice) bypass price/area checks.
-    All other listings must have a location matching one of the known villages in
-    gmina Liszki or gmina Czernichów, and must satisfy price/area thresholds.
-    Listings with unknown price or area pass those thresholds — we don't penalise
-    missing data.
+    A building plot always has powierzchnia (area) specified; listings without it
+    are treated as non-plots and rejected outright.
+    Exempt locations (Rączna, Ściejowice) bypass price/area threshold checks but
+    still require area to be set.
     """
+    if listing.area_m2 is None:
+        return False
+
     location = listing.location.lower()
 
     if any(exempt.lower() in location for exempt in FILTER_EXEMPT_LOCATIONS):
