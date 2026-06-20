@@ -36,16 +36,17 @@ def passes_filter(listing: Listing) -> bool:
 
     A building plot always has powierzchnia (area) specified; listings without it
     are treated as non-plots and rejected outright.
-    Exempt locations (Rączna, Ściejowice) bypass price/area threshold checks but
-    still require area to be set.
+    Exempt locations (Rączna, Ściejowice) bypass all checks — area, price,
+    and size thresholds — because we always want to see listings there regardless
+    of what the scraper managed to parse.
     """
-    if listing.area_m2 is None:
-        return False
-
     location = listing.location.lower()
 
     if any(exempt.lower() in location for exempt in FILTER_EXEMPT_LOCATIONS):
         return True
+
+    if listing.area_m2 is None:
+        return False
 
     if not any(allowed.lower() in location for allowed in ALLOWED_LOCATIONS):
         return False

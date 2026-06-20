@@ -29,12 +29,15 @@ def test_exempt_location_sciejowice_passes_regardless_of_area():
     assert passes_filter(listing) is True
 
 def test_exempt_location_substring_match():
-    listing = make_listing(location="Rączna, gmina Liszki", price=9_999_999.0)
+    listing = make_listing(location="Rączna, gmina Liszki", price=9_999_999.0, area_m2=None)
     assert passes_filter(listing) is True
 
 def test_exempt_check_is_case_insensitive():
-    listing = make_listing(location="rączna", price=9_999_999.0)
+    listing = make_listing(location="rączna", price=9_999_999.0, area_m2=None)
     assert passes_filter(listing) is True
+
+def test_exempt_location_passes_even_without_area():
+    assert passes_filter(make_listing(location="Rączna", area_m2=None)) is True
 
 
 # --- Price filter ---
