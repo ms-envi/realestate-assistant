@@ -2,20 +2,27 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from bs4 import BeautifulSoup
 
-from config import MUNICIPALITIES
+from config import ALLOWED_LOCATIONS
 from .base import BaseScraper, Listing
 
-# Each municipality gets its own subdomain; static HTML is server-rendered
-_MUNICIPALITY_SUBDOMAINS: dict[str, str] = {
-    "Liszki": "liszki",
-    "Czernichów": "czernichow",
-}
-
+# nieruchomosci-online.pl uses a per-village subdomain (e.g. raczna.nieruchomosci-online.pl),
+# NOT a per-municipality one. We search every village in ALLOWED_LOCATIONS.
 _BASE_URL = "https://{subdomain}.nieruchomosci-online.pl/dzialki/"
 _MAX_PAGES = 20
+
+
+def _to_slug(name: str) -> str:
+    """Convert a Polish place name to the nieruchomosci-online.pl subdomain format.
+
+    E.g. 'Rączna' → 'raczna', 'Dąbrowa Szlachecka' → 'dabrowa-szlachecka'.
+    """
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_ = nfkd.encode("ascii", "ignore").decode()
+    return re.sub(r"\s+", "-", ascii_.strip().lower())
 
 
 def _parse_price(text: str) -> float | None:
@@ -34,40 +41,44 @@ def _parse_area(text: str) -> float | None:
 class NieruchomosciOnlineScraper(BaseScraper):
     """Scraper for nieruchomosci-online.pl.
 
-    Uses the per-city subdomain URL (e.g. liszki.nieruchomosci-online.pl/dzialki/)
-    which renders plot listings as static HTML — no JavaScript needed.
+    Searches each village in ALLOWED_LOCATIONS on its own subdomain.
+    Stops paginating when a page returns the same listing IDs as the previous
+    page (the site silently mirrors page 1 for all ?page=N requests).
     """
 
     def fetch_listings(self) -> list[Listing]:
-        """Fetch listings from nieruchomosci-online.pl for all configured municipalities, across all pages."""
+        """Fetch listings from nieruchomosci-online.pl for all configured villages."""
         results: list[Listing] = []
-        for municipality in MUNICIPALITIES:
-            subdomain = _MUNICIPALITY_SUBDOMAINS.get(municipality, municipality.lower())
+        for village in ALLOWED_LOCATIONS:
+            subdomain = _to_slug(village)
             base_url = _BASE_URL.format(subdomain=subdomain)
             page = 1
+            prev_ids: frozenset[str] = frozenset()
             while page <= _MAX_PAGES:
                 url = base_url if page == 1 else f"{base_url}?page={page}"
                 try:
                     response = self._get(url)
                     listings = self._parse(response.text)
+                    curr_ids = frozenset(l.id for l in listings)
                     self.logger.info(
                         "nieruchomosci-online.pl: %d listings on page %d in %s",
-                        len(listings), page, municipality,
+                        len(listings), page, village,
                     )
-                    if not listings:
+                    if not listings or curr_ids == prev_ids:
                         break
                     results.extend(listings)
+                    prev_ids = curr_ids
                     page += 1
                 except Exception as exc:
                     self.logger.error(
                         "nieruchomosci-online.pl: failed to fetch %s page %d: %s",
-                        municipality, page, exc,
+                        village, page, exc,
                     )
                     break
         return results
 
     def _parse(self, html: str) -> list[Listing]:
-        """Parse listing tiles from the city subdomain page.
+        """Parse listing tiles from the village subdomain page.
 
         Args:
             html: Raw HTML of the plots listing page.

@@ -92,7 +92,7 @@ _EMPTY = "<html></html>"
 
 def test_fetch_listings_paginates_until_empty(mocker):
     scraper = NieruchomosciOnlineScraper()
-    mocker.patch("scrapers.nieruchomosci_online.MUNICIPALITIES", ["Liszki"])
+    mocker.patch("scrapers.nieruchomosci_online.ALLOWED_LOCATIONS", ["Liszki"])
     mock_get = mocker.patch.object(
         scraper, "_get",
         side_effect=[mocker.Mock(text=FIXTURE.read_text()), mocker.Mock(text=_EMPTY)],
@@ -103,7 +103,7 @@ def test_fetch_listings_paginates_until_empty(mocker):
 
 def test_fetch_listings_page2_uses_query_param(mocker):
     scraper = NieruchomosciOnlineScraper()
-    mocker.patch("scrapers.nieruchomosci_online.MUNICIPALITIES", ["Liszki"])
+    mocker.patch("scrapers.nieruchomosci_online.ALLOWED_LOCATIONS", ["Liszki"])
     mock_get = mocker.patch.object(
         scraper, "_get",
         side_effect=[mocker.Mock(text=FIXTURE.read_text()), mocker.Mock(text=_EMPTY)],
@@ -111,9 +111,10 @@ def test_fetch_listings_page2_uses_query_param(mocker):
     scraper.fetch_listings()
     assert "page=2" in mock_get.call_args_list[1][0][0]
 
-def test_fetch_listings_respects_max_pages(mocker):
+def test_fetch_listings_stops_when_page_repeats(mocker):
     scraper = NieruchomosciOnlineScraper()
-    mocker.patch("scrapers.nieruchomosci_online.MUNICIPALITIES", ["Liszki"])
+    mocker.patch("scrapers.nieruchomosci_online.ALLOWED_LOCATIONS", ["Liszki"])
     mock_get = mocker.patch.object(scraper, "_get", return_value=mocker.Mock(text=FIXTURE.read_text()))
     scraper.fetch_listings()
-    assert mock_get.call_count == 20
+    # Page 2 returns the same IDs as page 1 → dedup guard stops pagination after 2 calls
+    assert mock_get.call_count == 2

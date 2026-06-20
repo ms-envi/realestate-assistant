@@ -32,17 +32,20 @@ class AdresowoScraper(BaseScraper):
             slug = _MUNICIPALITY_SLUGS.get(municipality, municipality.lower())
             base_url = _BASE_URL.format(municipality=slug)
             page = 1
+            prev_ids: frozenset[str] = frozenset()
             while page <= _MAX_PAGES:
                 url = base_url if page == 1 else f"{base_url}?page={page}"
                 try:
                     response = self._get(url)
                     listings = self._parse(response.text)
+                    curr_ids = frozenset(l.id for l in listings)
                     self.logger.info(
                         "adresowo.pl: %d listings on page %d in %s", len(listings), page, municipality
                     )
-                    if not listings:
+                    if not listings or curr_ids == prev_ids:
                         break
                     results.extend(listings)
+                    prev_ids = curr_ids
                     page += 1
                 except Exception as exc:
                     self.logger.error(
